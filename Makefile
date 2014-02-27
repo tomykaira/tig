@@ -70,25 +70,20 @@ doc-man: $(MANDOC)
 doc-html: $(HTMLDOC)
 
 install: all
-	@mkdir -p $(DESTDIR)$(bindir)
-	install -p -m 0755 $(EXE) "$(DESTDIR)$(bindir)"
-	@mkdir -p $(DESTDIR)$(sysconfdir)
-	install -p -m 0444 tigrc "$(DESTDIR)$(sysconfdir)"
+	$(Q)mkdir -p $(DESTDIR)$(bindir) $(DESTDIR)$(sysconfdir)
+	$(call cmd,install,0755,$(EXE),$(DESTDIR)$(bindir))
+	$(call cmd,install,0444,tigrc,$(DESTDIR)$(bindir))
 
 install-doc-man: doc-man
-	mkdir -p $(DESTDIR)$(mandir)/man1 \
-		 $(DESTDIR)$(mandir)/man5 \
-		 $(DESTDIR)$(mandir)/man7
-	for doc in $(MANDOC); do \
-		sed 's#++SYSCONFDIR++#$(sysconfdir)#' < "$$doc" > "$$doc+"; \
-		bdoc=$$(basename $$doc); \
-		case "$$doc" in \
-		*.1) install -p -m 0644 "$$doc+" "$(DESTDIR)$(mandir)/man1/$$bdoc" ;; \
-		*.5) install -p -m 0644 "$$doc+" "$(DESTDIR)$(mandir)/man5/$$bdoc" ;; \
-		*.7) install -p -m 0644 "$$doc+" "$(DESTDIR)$(mandir)/man7/$$bdoc" ;; \
-		esac; \
-		$(RM) "$$doc+"; \
-	done
+	$(Q)mkdir -p $(DESTDIR)$(mandir)/man1 \
+		     $(DESTDIR)$(mandir)/man5 \
+		     $(DESTDIR)$(mandir)/man7
+	@$(foreach doc, $(filter %.1, $(MANDOC)), \
+		$(call ncmd,installdoc,0444,$(doc),$(DESTDIR)$(mandir)/man1))
+	@$(foreach doc, $(filter %.5, $(MANDOC)), \
+		$(call ncmd,installdoc,0444,$(doc),$(DESTDIR)$(mandir)/man5))
+	@$(foreach doc, $(filter %.7, $(MANDOC)), \
+		$(call ncmd,installdoc,0444,$(doc),$(DESTDIR)$(mandir)/man7))
 
 install-release-doc-man:
 	GIT_INDEX_FILE=.tmp-doc-index git read-tree origin/release
@@ -97,15 +92,9 @@ install-release-doc-man:
 	$(MAKE) install-doc-man
 
 install-doc-html: doc-html
-	mkdir -p $(DESTDIR)$(docdir)/tig
-	for doc in $(HTMLDOC); do \
-		sed 's#++SYSCONFDIR++#$(sysconfdir)#' < "$$doc" > "$$doc+"; \
-		bdoc=$$(basename $$doc); \
-		case "$$doc" in \
-		*.html) install -p -m 0644 "$$doc+" "$(DESTDIR)$(docdir)/tig/$$bdoc" ;; \
-		esac; \
-		$(RM) "$$doc+"; \
-	done
+	$(Q)mkdir -p $(DESTDIR)$(docdir)/tig
+	@$(foreach doc,$(HTMLDOC), \
+		$(call ncmd,installdoc,0444,$(doc),$(DESTDIR)$(docdir)/tig);)
 
 install-release-doc-html:
 	GIT_INDEX_FILE=.tmp-doc-index git read-tree origin/release
@@ -117,13 +106,13 @@ install-doc: install-doc-man install-doc-html
 install-release-doc: install-release-doc-man install-release-doc-html
 
 clean:
-	$(RM) -r $(TARNAME) *.spec tig-*.tar.gz tig-*.tar.gz.md5 .deps
-	$(RM) $(EXE) $(TOOLS) $(OBJS) core doc/*.xml src/builtin-config.c
+	$(Q)$(RM) -r $(TARNAME) *.spec tig-*.tar.gz tig-*.tar.gz.md5 .deps
+	$(Q)$(RM) $(EXE) $(TOOLS) $(OBJS) core doc/*.xml src/builtin-config.c
 
 distclean: clean
-	$(RM) -r doc/manual.html-chunked autom4te.cache release-docs
-	$(RM) doc/*.toc $(ALLDOC) aclocal.m4 configure
-	$(RM) config.h config.log config.make config.status config.h.in
+	$(Q)$(RM) -r doc/manual.html-chunked autom4te.cache release-docs
+	$(Q)$(RM) doc/*.toc $(ALLDOC) aclocal.m4 configure
+	$(Q)$(RM) config.h config.log config.make config.status config.h.in
 
 spell-check:
 	for file in $(TXTDOC) src/tig.c; do \
@@ -135,7 +124,7 @@ strip: $(EXE)
 	strip $(EXE)
 
 update-headers:
-	@for file in include/*.h src/*.c tools/*.c; do \
+	$(Q)for file in include/*.h src/*.c tools/*.c; do \
 		grep -q '/* Copyright' "$$file" && \
 			sed '0,/.*\*\//d' < "$$file" | \
 			grep -v '/* vim: set' > "$$file.tmp"; \
@@ -146,14 +135,14 @@ update-headers:
 	done
 
 update-docs: tools/doc-gen
-	doc="doc/tigrc.5.adoc"; \
+	$(Q)doc="doc/tigrc.5.adoc"; \
 	sed -n '0,/ifndef::DOC_GEN_ACTIONS/p' < "$$doc" > "$$doc.gen"; \
 	./tools/doc-gen actions >> "$$doc.gen"; \
 	sed -n '/endif::DOC_GEN_ACTIONS/,$$p' < "$$doc" >> "$$doc.gen" ; \
 	mv "$$doc.gen" "$$doc"
 
 dist: configure tig.spec
-	@mkdir -p $(TARNAME) && \
+	$(Q)mkdir -p $(TARNAME) && \
 	cp Makefile tig.spec configure config.h.in aclocal.m4 $(TARNAME) && \
 	sed -i "s/VERSION\s\+=\s\+[0-9]\+\([.][0-9]\+\)\+/VERSION	= $(VERSION)/" $(TARNAME)/Makefile
 	git archive --format=tar --prefix=$(TARNAME)/ HEAD | \
@@ -237,16 +226,16 @@ OBJS = $(sort $(TIG_OBJS) $(TEST_GRAPH_OBJS) $(DOC_GEN_OBJS))
 DEPS_CFLAGS ?= -MMD -MP -MF .deps/$*.d
 
 %: %.o
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
+	$(call cmd,link)
 
 %.o: %.c
 	@mkdir -p $(abspath .deps/$(*D))
-	$(CC) -I. -Iinclude $(CFLAGS) $(DEPS_CFLAGS) $(CPPFLAGS) -c -o $@ $<
+	$(call cmd,compile)
 
 -include $(OBJS:%.o=.deps/%.d)
 
 src/builtin-config.c: tigrc tools/make-builtin-config.sh
-	tools/make-builtin-config.sh $< > $@
+	$(call cmd,generate,tools/make-builtin-config.sh $<)
 
 tig.spec: contrib/tig.spec.in
 	sed -e 's/@@VERSION@@/$(RPM_VERSION)/g' \
@@ -255,52 +244,90 @@ tig.spec: contrib/tig.spec.in
 doc/manual.html: doc/manual.toc
 doc/manual.html: ASCIIDOC_FLAGS += -ainclude-manual-toc
 %.toc: %.adoc
-	sed -n '/^\[\[/,/\(---\|~~~\)/p' < $< | while read line; do \
-		case "$$line" in \
-		"----"*)  echo ". <<$$ref>>"; ref= ;; \
-		"~~~~"*)  echo "- <<$$ref>>"; ref= ;; \
-		"[["*"]]") ref="$$line" ;; \
-		*)	   ref="$$ref, $$line" ;; \
-		esac; done | sed 's/\[\[\(.*\)\]\]/\1/' > $@
+	$(call cmd,generate,tools/make-asciidoc-toc.sh $<)
 
 README.html: README.adoc doc/asciidoc.conf
-	$(ASCIIDOC) $(ASCIIDOC_FLAGS) -b xhtml11 -d article -a readme $<
+	$(call cmd,asciidoc,xhtml11,article,-a readme)
 
 INSTALL.html: INSTALL.adoc doc/asciidoc.conf
-	$(ASCIIDOC) $(ASCIIDOC_FLAGS) -b xhtml11 -d article $<
+	$(call cmd,asciidoc,xhtml11,article)
 
 NEWS.html: NEWS.adoc doc/asciidoc.conf
-	$(ASCIIDOC) $(ASCIIDOC_FLAGS) -b xhtml11 -d article $<
+	$(call cmd,asciidoc,xhtml11,article)
 
 doc/tigmanual.7: doc/manual.adoc
 
 %.1.html : %.1.adoc doc/asciidoc.conf
-	$(ASCIIDOC) $(ASCIIDOC_FLAGS) -b xhtml11 -d manpage $<
+	$(call cmd,asciidoc,xhtml11,manpage)
 
 %.1.xml : %.1.adoc doc/asciidoc.conf
-	$(ASCIIDOC) $(ASCIIDOC_FLAGS) -b docbook -d manpage $<
+	$(call cmd,asciidoc,docbook,manpage)
 
 %.5.html : %.5.adoc doc/asciidoc.conf
-	$(ASCIIDOC) $(ASCIIDOC_FLAGS) -b xhtml11 -d manpage $<
+	$(call cmd,asciidoc,xhtml11,manpage)
 
 %.5.xml : %.5.adoc doc/asciidoc.conf
-	$(ASCIIDOC) $(ASCIIDOC_FLAGS) -b docbook -d manpage $<
+	$(call cmd,asciidoc,docbook,manpage)
 
 %.7.xml : %.7.adoc doc/asciidoc.conf
-	$(ASCIIDOC) $(ASCIIDOC_FLAGS) -b docbook -d manpage $<
+	$(call cmd,asciidoc,docbook,manpage)
 
 %.html: ASCIIDOC_FLAGS += -adocext=html
 %.html : %.adoc doc/asciidoc.conf
-	$(ASCIIDOC) $(ASCIIDOC_FLAGS) -b xhtml11 -d article -n $<
+	$(call cmd,asciidoc,xhtml11,article,-n)
 
 %.xml : %.adoc doc/asciidoc.conf
-	$(ASCIIDOC) $(ASCIIDOC_FLAGS) -b docbook -d article $<
+	$(call cmd,asciidoc,docbook,article)
 
 % : %.xml
-	$(XMLTO) man -o doc $<
+	$(call cmd,xmlto,man -o doc)
 
 %.html-chunked : %.xml
-	$(XMLTO) html -o $@ $<
+	$(call cmd,xmlto,html -o $@)
 
 %.pdf : %.xml
 	$(DOCBOOK2PDF) -o doc $<
+
+###############################################################################
+# Build recipies
+
+# If we are verbose, we will show the "real" cmds instead of
+# their quiet versions (which are used in the non-verbose mode).
+# Inspired by the Linux kernel build system.
+#
+# If real cmds are to be shown, then quoteverbose quotes each as
+# a shell word, so that it can be accurately displayed with echo.
+# If the quiet versions are to be shown, then they should already
+# be sufficiently quoted, so quoteverbose does nothing.
+
+  quiet_cmd_generate = '     GEN  $(RELPATH)$@'
+        cmd_generate = $(2) > $@
+
+   quiet_cmd_compile = '      CC  $(RELPATH)$@'
+         cmd_compile = $(CC) -I. -Iinclude $(CFLAGS) $(DEPS_CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
+      quiet_cmd_link = '    LINK  $(RELPATH)$@'
+            cmd_link = $(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
+
+   quiet_cmd_install = ' INSTALL  $(RELPATH)$(3) -> $(4)'
+         cmd_install = install -p -m $(2) $(3) "$(4)"
+
+quiet_cmd_installdoc = ' INSTALL  $(RELPATH)$(3) -> $(4)'
+      cmd_installdoc = sed 's,++SYSCONFDIR++,$(sysconfdir),' < $(3) > $(3)+; install -p -m $(2) $(3)+ "$(4)/$(notdir $(3))" ; $(RM) $(3)+
+
+  quiet_cmd_asciidoc = 'ASCIIDOC  $(RELPATH)$@'
+        cmd_asciidoc = $(ASCIIDOC) $(ASCIIDOC_FLAGS) -b $(2) -d $(3) $(4) $<
+
+     quiet_cmd_xmlto = '   XMLTO  $(RELPATH)$@'
+           cmd_xmlto = $(XMLTO) $(2) $<
+
+cmd = @$(if $($(quiet)cmd_$(1)),echo $($(quiet)cmd_$(1)) &&) $(cmd_$(1))
+ncmd = $(if $($(quiet)cmd_$(1)),echo $($(quiet)cmd_$(1)) &&) $(cmd_$(1))
+
+ifndef V
+	quiet = quiet_
+	Q = @
+else
+	quiet =
+	Q =
+endif
