@@ -70,20 +70,16 @@ doc-man: $(MANDOC)
 doc-html: $(HTMLDOC)
 
 install: all
-	$(Q)mkdir -p $(DESTDIR)$(bindir) $(DESTDIR)$(sysconfdir)
 	$(call cmd,install,0755,$(EXE),$(DESTDIR)$(bindir))
 	$(call cmd,install,0444,tigrc,$(DESTDIR)$(bindir))
 
 install-doc-man: doc-man
-	$(Q)mkdir -p $(DESTDIR)$(mandir)/man1 \
-		     $(DESTDIR)$(mandir)/man5 \
-		     $(DESTDIR)$(mandir)/man7
-	@$(foreach doc, $(filter %.1, $(MANDOC)), \
-		$(call ncmd,installdoc,0444,$(doc),$(DESTDIR)$(mandir)/man1))
-	@$(foreach doc, $(filter %.5, $(MANDOC)), \
-		$(call ncmd,installdoc,0444,$(doc),$(DESTDIR)$(mandir)/man5))
-	@$(foreach doc, $(filter %.7, $(MANDOC)), \
-		$(call ncmd,installdoc,0444,$(doc),$(DESTDIR)$(mandir)/man7))
+	$(foreach doc, $(filter %.1, $(MANDOC)), \
+		$(call cmd,installdoc,0444,$(doc),$(DESTDIR)$(mandir)/man1))
+	$(foreach doc, $(filter %.5, $(MANDOC)), \
+		$(call cmd,installdoc,0444,$(doc),$(DESTDIR)$(mandir)/man5))
+	$(foreach doc, $(filter %.7, $(MANDOC)), \
+		$(call cmd,installdoc,0444,$(doc),$(DESTDIR)$(mandir)/man7))
 
 install-release-doc-man:
 	GIT_INDEX_FILE=.tmp-doc-index git read-tree origin/release
@@ -92,9 +88,8 @@ install-release-doc-man:
 	$(MAKE) install-doc-man
 
 install-doc-html: doc-html
-	$(Q)mkdir -p $(DESTDIR)$(docdir)/tig
-	@$(foreach doc,$(HTMLDOC), \
-		$(call ncmd,installdoc,0444,$(doc),$(DESTDIR)$(docdir)/tig);)
+	$(foreach doc,$(HTMLDOC), \
+		$(call cmd,installdoc,0444,$(doc),$(DESTDIR)$(docdir)/tig);)
 
 install-release-doc-html:
 	GIT_INDEX_FILE=.tmp-doc-index git read-tree origin/release
@@ -310,10 +305,13 @@ doc/tigmanual.7: doc/manual.adoc
             cmd_link = $(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
    quiet_cmd_install = ' INSTALL  $(RELPATH)$(3) -> $(4)'
-         cmd_install = install -p -m $(2) $(3) "$(4)"
+         cmd_install = mkdir -p "$(4)" && install -p -m $(2) $(3) "$(4)"
 
 quiet_cmd_installdoc = ' INSTALL  $(RELPATH)$(3) -> $(4)'
-      cmd_installdoc = sed 's,++SYSCONFDIR++,$(sysconfdir),' < $(3) > $(3)+; install -p -m $(2) $(3)+ "$(4)/$(notdir $(3))" ; $(RM) $(3)+
+      cmd_installdoc = sed 's,++SYSCONFDIR++,$(sysconfdir),' < $(3) > $(3)+ && \
+		       mkdir -p "$(4)" && \
+		       install -p -m $(2) $(3)+ "$(4)/$(notdir $(3))" && \
+		       $(RM) $(3)+
 
   quiet_cmd_asciidoc = 'ASCIIDOC  $(RELPATH)$@'
         cmd_asciidoc = $(ASCIIDOC) $(ASCIIDOC_FLAGS) -b $(2) -d $(3) $(4) $<
