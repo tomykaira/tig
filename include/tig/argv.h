@@ -42,6 +42,7 @@ bool argv_contains(const char **argv, const char *arg);
 	_(file,	 	"",	""), \
 	_(head,	 	"",	"HEAD"), \
 	_(ref,	 	"HEAD",	""), \
+	_(root,   "", ""), \
 	_(stash,	"",	""), \
 	_(status,	"",	"")
 

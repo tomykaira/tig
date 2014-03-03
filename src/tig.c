@@ -356,7 +356,7 @@ view_driver(struct view *view, enum request request)
 		{
 			char action[SIZEOF_STR] = "";
 			enum view_flag flags = toggle_option(view, request, action);
-	
+
 			if (flags == VIEW_FLAG_RESET_DISPLAY) {
 				resize_display();
 				redraw_display(TRUE);
@@ -817,6 +817,14 @@ main(int argc, const char *argv[])
 
 	if (load_refs(FALSE) == ERR)
 		die("Failed to load refs.");
+
+	const char *rev_parse_argv[] = {
+		"git", "rev-parse", "--show-toplevel", NULL
+	};
+
+	if (!io_run_buf(rev_parse_argv, view->env->root, sizeof(view->env->root))) {
+		die("Failed to resolve toplevel");
+	}
 
 	init_display();
 
