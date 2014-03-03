@@ -435,16 +435,38 @@ get_input(int prompt_position, struct key_input *input, bool modifiers)
 			redraw_display(TRUE);
 
 		} else {
+			int pos = 0;
+
 			input_mode = FALSE;
 			if (key == erasechar())
 				key = KEY_BACKSPACE;
-			input->key = key;
-			return input->key;
+
+			if (KEY_CTL('a') <= key && key <= KEY_CTL('x') && key != KEY_CTL('m')) {
+				io_trace("CONTROL %d %x %x l=%x - %c %c\n", key, key, KEY_CTL('l'), 'l', key | 0x40, key + 'a');
+				input->modifiers.control = 1;
+				key = key | 0x40;
+			}
+
+			if ((key >= KEY_MIN && key < KEY_MAX) || key < 0x1F || key == ' ') {
+				input->data.key = key;
+				io_trace("%d ESC=%d KEY=%s\n", key, input->modifiers.escape, keyname(key));
+				return input->data.key;
+			}
+
+			input->modifiers.multibytes = 1;
+			input->data.bytes[pos++] = key;
+
+			key = utf8_char_length(input->data.bytes);
+			while (pos < key && pos < sizeof(input->data.bytes) - 1) {
+				input->data.bytes[pos++] = wgetch(status_win);
+			}
+			io_trace("%s ESC=%d CTRL=%d\n", input->data.bytes, input->modifiers.escape, input->modifiers.control);
+			return 0;
 		}
 	}
 }
 
-typedef enum input_status (*input_handler)(void *data, char *buf, int c);
+typedef enum input_status (*input_handler)(void *data, char *buf, struct key_input *input);
 
 static char *
 prompt_input(const char *prompt, input_handler handler, void *data)
@@ -484,9 +506,13 @@ prompt_input(const char *prompt, input_handler handler, void *data)
 				return NULL;
 			}
 
-			status = handler(data, buf, input.key);
-			if (status == INPUT_OK)
-				buf[pos++] = (char) input.key;
+			io_trace("[BEFORE] %s <%s>\n", buf, input.data.bytes);
+			status = handler(data, buf, &input);
+			if (status == INPUT_OK) {
+				string_ncopy_do(buf + pos, sizeof(buf) - pos, input.data.bytes, strlen(input.data.bytes));
+				pos += strlen(input.data.bytes);
+				io_trace("[OK] %s <%s>\n", buf, input.data.bytes);
+			}
 		}
 	}
 
@@ -503,8 +529,10 @@ prompt_input(const char *prompt, input_handler handler, void *data)
 }
 
 static enum input_status
-prompt_yesno_handler(void *data, char *buf, int c)
+prompt_yesno_handler(void *data, char *buf, struct key_input *input)
 {
+	unsigned long c = input->modifiers.multibytes ? utf8_to_unicode(input->data.bytes, strlen(input->data.bytes)) : 0;
+
 	if (c == 'y' || c == 'Y')
 		return INPUT_STOP;
 	if (c == 'n' || c == 'N')
@@ -524,9 +552,11 @@ prompt_yesno(const char *prompt)
 }
 
 static enum input_status
-read_prompt_handler(void *data, char *buf, int c)
+read_prompt_handler(void *data, char *buf, struct key_input *input)
 {
-	return isprint(c) ? INPUT_OK : INPUT_SKIP;
+	unsigned long c = input->modifiers.multibytes ? utf8_to_unicode(input->data.bytes, strlen(input->data.bytes)) : 0;
+
+	return unicode_width(c, 8) ? INPUT_OK : INPUT_SKIP;
 }
 
 char *
@@ -583,7 +613,7 @@ prompt_menu(const char *prompt, const struct menu_item *items, int *selected)
 
 		default:
 			for (i = 0; items[i].text; i++)
-				if (items[i].hotkey == input.key) {
+				if (items[i].hotkey == input.data.bytes[0]) {
 					*selected = i;
 					status = INPUT_STOP;
 					break;

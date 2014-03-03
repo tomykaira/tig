@@ -32,20 +32,16 @@ struct keymap {
 };
 
 struct key_input {
-	int key;
+	union {
+		int key;
+		char bytes[7];
+	} data;
 	struct {
 		bool escape:1;
 		bool control:1;
+		bool multibytes:1;
 	} modifiers;
 };
-
-static inline int
-get_key_combo_value(struct key_input *key)
-{
-	return key->key +
-		(key->modifiers.escape ? 0x80 : 0) +
-		(key->modifiers.control ? 0x1F : 0);
-}
 
 void add_keymap(struct keymap *keymap);
 struct keymap *get_keymap(const char *name, size_t namelen);

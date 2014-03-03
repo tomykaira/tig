@@ -668,7 +668,7 @@ run_prompt_command(struct view *view, char *cmd)
 		}
 
 	} else if (cmd && strlen(cmd) == 1) {
-		struct key_input input = { cmd[0] };
+		struct key_input input = { { cmd[0] } };
 
 		request = get_keybinding(&view->ops->keymap, &input);
 		return request;
